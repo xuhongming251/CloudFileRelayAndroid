@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp">
+
+        <TextView
+            android:id="@+id/browser_back"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:contentDescription="@string/browser_back_description"
+            android:gravity="center"
+            android:text="@string/back"
+            android:textColor="@color/text_primary"
+            android:textSize="34sp" />
+
+        <ImageView
+            android:id="@+id/browser_home"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:contentDescription="@string/browser_home_description"
+            android:padding="9dp"
+            android:src="@drawable/ic_home"
+            android:tint="@color/text_secondary" />
+
+        <TextView
+            android:id="@+id/browser_address"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="1"
+            android:background="@drawable/address_background"
+            android:ellipsize="middle"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingHorizontal="14dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/browser_refresh"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:gravity="center"
+            android:text="@string/refresh"
+            android:textColor="@color/text_primary"
+            android:textSize="24sp" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/browser_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:max="100"
+        android:progressTint="@color/brand"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <org.mozilla.geckoview.GeckoView
+            android:id="@+id/gecko_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:id="@+id/detected_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginEnd="10dp"
+            android:layout_marginBottom="34dp"
+            android:background="@drawable/panel_background"
+            android:elevation="18dp"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/detected_title"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:text="@string/detected_title"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/detected_close"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="临时关闭"
+                    android:gravity="center"
+                    android:text="×"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="26sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/detected_file"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="middle"
+                android:maxLines="2"
+                android:paddingTop="6dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                style="?android:attr/buttonBarStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="12dp">
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:id="@+id/select_file"
+                    android:layout_width="112dp"
+                    android:layout_height="52dp"
+                    android:layout_marginEnd="8dp"
+                    android:backgroundTint="#EEF2FF"
+                    android:text="@string/select_file"
+                    android:textAllCaps="false"
+                    android:textColor="@color/brand" />
+
+                <Button
+                    android:id="@+id/start_transfer"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/primary_action_button"
+                    android:backgroundTint="@null"
+                    android:elevation="4dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:text="@string/start_transfer"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

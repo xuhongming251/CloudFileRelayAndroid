@@ -1,0 +1,33 @@
+{
+  "manifest_version": 2,
+  "name": "Cloud File Relay Bridge",
+  "version": "1.4.1",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "cloudfilerelay@local"
+    }
+  },
+  "permissions": [
+    "<all_urls>",
+    "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.civitai.com/*",
+        "*://huggingface.co/*",
+        "*://*.huggingface.co/*",
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

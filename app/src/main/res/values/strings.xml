@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">云端转存</string>
+    <string name="nav_home">首页</string>
+    <string name="nav_browse">发现</string>
+    <string name="nav_tasks">任务</string>
+    <string name="back">‹</string>
+    <string name="browser_back_description">返回上一个网页</string>
+    <string name="browser_home_description">返回应用首页</string>
+    <string name="refresh">↻</string>
+    <string name="detected_title">发现可转存文件</string>
+    <string name="select_file">选择文件</string>
+    <string name="start_transfer">立即转存</string>
+</resources>

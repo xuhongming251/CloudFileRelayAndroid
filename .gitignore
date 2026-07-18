@@ -1,0 +1,21 @@
+# Gradle and Android build outputs
+.gradle/
+**/build/
+.cxx/
+.externalNativeBuild/
+
+# Local IDE and SDK configuration
+.idea/
+*.iml
+local.properties
+.DS_Store
+
+# Generated packages and device-test evidence
+*.apk
+*.aab
+artifacts/
+
+# Local diagnostic captures
+hf_filename_issue.xml
+captures/
+*.hprof
