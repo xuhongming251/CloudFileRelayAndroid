@@ -10,6 +10,16 @@
 - [下载最新版 APK](https://github.com/xuhongming251/CloudFileRelayAndroid/releases/latest/download/CloudFileRelayAndroid.apk)
 - [查看全部版本](https://github.com/xuhongming251/CloudFileRelayAndroid/releases)
 
+## 应用预览
+
+[▶ 观看操作演示视频](docs/media/app-demo.mp4)
+
+<p align="center">
+  <img src="docs/media/home.jpg" width="30%" alt="首页">
+  <img src="docs/media/discover.jpg" width="30%" alt="发现模型">
+  <img src="docs/media/tasks.jpg" width="30%" alt="转存任务">
+</p>
+
 ## 一、软件功能简介
 
 - 输入文件下载地址，直接创建转存任务。
@@ -19,7 +29,7 @@
 - Hugging Face 支持将整个仓库打包为 ZIP。
 - 发现页面支持多关键词模糊搜索。
 - 任务页面可查看进度、打开网盘链接和删除记录。
-- 支持夸克网盘、百度网盘和移动云盘。
+- 当前支持夸克网盘转存，百度网盘和移动云盘暂不可选。
 
 ## 二、使用说明
 

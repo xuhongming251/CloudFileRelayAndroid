@@ -595,13 +595,19 @@ final class BrowserPage {
         String[] values = {"quark", "baidu", "mobile"};
         String[] labels = {"夸克网盘", "百度网盘", "移动云盘"};
         String remembered = activity.getSharedPreferences("relay_ui", Activity.MODE_PRIVATE).getString("target", "quark");
+        if (!"quark".equals(remembered)) remembered = "quark";
         for (int i = 0; i < values.length; i++) {
             RadioButton option = new RadioButton(activity);
+            boolean available = "quark".equals(values[i]);
             option.setId(View.generateViewId());
             option.setTag(values[i]);
             option.setText(labels[i]);
             option.setTextSize(12);
-            option.setChecked(values[i].equals(remembered));
+            option.setTextColor(available ? Ui.TEXT : Color.rgb(148, 163, 184));
+            option.setAlpha(available ? 1f : 0.5f);
+            option.setEnabled(available);
+            option.setClickable(available);
+            option.setChecked(available && values[i].equals(remembered));
             targets.addView(option, new RadioGroup.LayoutParams(0, Ui.dp(activity, 52), 1));
         }
         form.addView(targets);
