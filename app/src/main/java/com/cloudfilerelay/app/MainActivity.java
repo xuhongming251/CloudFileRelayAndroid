@@ -1,10 +1,6 @@
 package com.cloudfilerelay.app;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -37,6 +33,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends Activity {
+    static final String EXTRA_CLEAR_HOME_LINK = "clear_home_link";
     private FrameLayout content;
     private LinearLayout navHome;
     private LinearLayout navBrowse;
@@ -44,6 +41,7 @@ public class MainActivity extends Activity {
     private TextView navHomeLabel;
     private TextView navBrowseLabel;
     private TextView navTasksLabel;
+    private TextView taskBadge;
     private ImageView navHomeIcon;
     private ImageView navBrowseIcon;
     private ImageView navTasksIcon;
@@ -57,6 +55,7 @@ public class MainActivity extends Activity {
     private TextView activeTaskFilename;
     private String expandedTaskId;
     private String homeLinkDraft = "";
+    private EditText homeLinkInput;
     private DiscoverPage discoverPage;
     private BrowserPage homeBrowserPage;
     private final Runnable taskPoll = () -> refreshTasks(false);
@@ -72,9 +71,12 @@ public class MainActivity extends Activity {
         navHomeLabel = findViewById(R.id.nav_home_label);
         navBrowseLabel = findViewById(R.id.nav_browse_label);
         navTasksLabel = findViewById(R.id.nav_tasks_label);
+        taskBadge = findViewById(R.id.task_badge);
         navHomeIcon = findViewById(R.id.nav_home_icon);
         navBrowseIcon = findViewById(R.id.nav_browse_icon);
         navTasksIcon = findViewById(R.id.nav_tasks_icon);
+        updateTaskBadge();
+        clearSubmittedHomeLink(getIntent());
 
         navHome.setOnClickListener(v -> { v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); showHome(); });
         navBrowse.setOnClickListener(v -> { v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); showBrowserPicker(); });
@@ -102,12 +104,13 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        updateTaskBadge();
         if ("tasks".equals(currentTab)) {
             showTasks();
-            scheduleTaskRefresh(450);
         } else if ("browse".equals(currentTab) && discoverPage != null) {
             discoverPage.start();
         }
+        scheduleTaskRefresh(450);
     }
 
     @Override
@@ -122,6 +125,7 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        clearSubmittedHomeLink(intent);
         String startUrl = intent.getStringExtra("start_url");
         if (startUrl != null && startUrl.startsWith("http")) {
             openBrowser(startUrl, intent.getBooleanExtra("direct_download", false));
@@ -160,6 +164,36 @@ public class MainActivity extends Activity {
         item.setBackground(active ? Ui.background(Ui.BRAND_SOFT, 18, this) : null);
     }
 
+    private void handleTasksChanged() {
+        runOnUiThread(() -> {
+            updateTaskBadge();
+            scheduleTaskRefresh(350);
+        });
+    }
+
+    private void updateTaskBadge() {
+        if (taskBadge == null) return;
+        int active = 0;
+        for (TaskItem item : TaskStore.load(this)) {
+            if (isActiveTask(item)) active++;
+        }
+        if (active <= 0) {
+            taskBadge.setVisibility(View.GONE);
+            taskBadge.setText("");
+            taskBadge.setContentDescription("当前没有正在进行的任务");
+            return;
+        }
+        taskBadge.setText(active > 99 ? "99+" : String.valueOf(active));
+        taskBadge.setContentDescription("正在进行 " + active + " 个任务");
+        taskBadge.setVisibility(View.VISIBLE);
+    }
+
+    private boolean isActiveTask(TaskItem item) {
+        return !TaskItem.COMPLETED.equals(item.status)
+                && !TaskItem.FAILED.equals(item.status)
+                && !TaskItem.SERVICE_REQUIRED.equals(item.status);
+    }
+
     private void replaceContent(View page) {
         replaceContent(page, true);
     }
@@ -184,7 +218,6 @@ public class MainActivity extends Activity {
     private void showHome() {
         stopDiscoverPage();
         currentTab = "home";
-        taskPollHandler.removeCallbacks(taskPoll);
         selectNav(navHome);
         if (homeBrowserPage != null) {
             replaceContent(homeBrowserPage.view());
@@ -254,12 +287,6 @@ public class MainActivity extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.addView(Ui.text(this, "输入下载链接", 15, Ui.TEXT, true),
                 new LinearLayout.LayoutParams(0, Ui.dp(this, 34), 1));
-        TextView paste = Ui.text(this, "粘贴", 13, Ui.BRAND, true);
-        paste.setGravity(Gravity.CENTER);
-        paste.setBackground(Ui.background(Ui.BRAND_SOFT, 12, this));
-        LinearLayout.LayoutParams pasteParams = new LinearLayout.LayoutParams(Ui.dp(this, 58), Ui.dp(this, 34));
-        pasteParams.rightMargin = Ui.dp(this, 8);
-        header.addView(paste, pasteParams);
         TextView help = Ui.text(this, "?", 15, Ui.BRAND, true);
         help.setGravity(Gravity.CENTER);
         help.setContentDescription("使用说明");
@@ -271,12 +298,13 @@ public class MainActivity extends Activity {
         LinearLayout inputRow = new LinearLayout(this);
         inputRow.setGravity(Gravity.CENTER_VERTICAL);
         EditText input = new EditText(this);
+        homeLinkInput = input;
         input.setSingleLine(true);
         input.setText(homeLinkDraft);
         input.setTextSize(13);
         input.setTextColor(Ui.TEXT);
         input.setHintTextColor(Color.rgb(148, 163, 184));
-        input.setHint("粘贴模型页面或文件下载链接");
+        input.setHint("粘贴实际的文件下载地址");
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         input.setImeOptions(EditorInfo.IME_ACTION_GO);
         input.setBackground(Ui.bordered(Color.rgb(248, 250, 252), Ui.BORDER, 15, this));
@@ -306,8 +334,6 @@ public class MainActivity extends Activity {
             }
             return false;
         });
-        paste.setOnClickListener(v -> pasteIntoHomeInput(input));
-
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         cardParams.bottomMargin = Ui.dp(this, 20);
         card.setLayoutParams(cardParams);
@@ -370,25 +396,9 @@ public class MainActivity extends Activity {
         return card;
     }
 
-    private void pasteLink() {
-        ClipboardManager manager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        if (manager == null || !manager.hasPrimaryClip()) {
-            Toast.makeText(this, "剪贴板中没有链接", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        ClipData clip = manager.getPrimaryClip();
-        String value = clip == null || clip.getItemCount() == 0 ? "" : clip.getItemAt(0).coerceToText(this).toString().trim();
-        if (!value.startsWith("https://")) {
-            Toast.makeText(this, "请复制 Civitai 或 Hugging Face 链接", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        openBrowser(value);
-    }
-
     private void showBrowserPicker() {
         stopDiscoverPage();
         currentTab = "browse";
-        taskPollHandler.removeCallbacks(taskPoll);
         selectNav(navBrowse);
         discoverPage = new DiscoverPage(this);
         replaceContent(discoverPage.view());
@@ -406,10 +416,9 @@ public class MainActivity extends Activity {
         stopDiscoverPage();
         stopHomeBrowser();
         currentTab = "home";
-        taskPollHandler.removeCallbacks(taskPoll);
         selectNav(navHome);
         homeBrowserPage = new BrowserPage(this, url, false,
-                this::closeHomeBrowser, this::showTasks);
+                this::closeHomeBrowser, null, this::handleTasksChanged);
         replaceContent(homeBrowserPage.view());
     }
 
@@ -437,22 +446,12 @@ public class MainActivity extends Activity {
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
     }
 
-    private void pasteIntoHomeInput(EditText input) {
-        String value = clipboardText();
-        if (value.isEmpty()) {
-            Toast.makeText(this, "剪贴板中没有链接", Toast.LENGTH_SHORT).show();
-            return;
+    private void clearSubmittedHomeLink(Intent intent) {
+        if (intent != null && intent.getBooleanExtra(EXTRA_CLEAR_HOME_LINK, false)) {
+            intent.removeExtra(EXTRA_CLEAR_HOME_LINK);
+            homeLinkDraft = "";
+            if (homeLinkInput != null) homeLinkInput.setText("");
         }
-        input.setText(value);
-        input.setSelection(value.length());
-    }
-
-    private String clipboardText() {
-        ClipboardManager manager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        if (manager == null || !manager.hasPrimaryClip()) return "";
-        ClipData clip = manager.getPrimaryClip();
-        return clip == null || clip.getItemCount() == 0 ? ""
-                : clip.getItemAt(0).coerceToText(this).toString().trim();
     }
 
     private void submitHomeLink(EditText input) {
@@ -466,32 +465,22 @@ public class MainActivity extends Activity {
             input.requestFocus();
             return;
         }
-        boolean supported = host.equals("civitai.com") || host.endsWith(".civitai.com")
-                || host.equals("huggingface.co") || host.endsWith(".huggingface.co");
-        if (!supported) {
-            input.setError("目前支持 Civitai 和 Hugging Face 链接");
-            input.requestFocus();
-            return;
-        }
         homeLinkDraft = value;
         InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
         if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
-        openBrowser(value, looksLikeDirectDownload(value));
-    }
-
-    private boolean looksLikeDirectDownload(String value) {
-        String lower = value.toLowerCase(java.util.Locale.ROOT);
-        return lower.contains("/api/download/") || lower.contains("/resolve/")
-                || lower.matches(".*\\.(safetensors|gguf|ckpt|bin|pt|pth|onnx|tflite|zip)(?:[?#].*)?$");
+        openBrowser(value, true);
     }
 
     private void showLinkHelp() {
-        new AlertDialog.Builder(this)
-                .setTitle("如何使用云端转存？")
-                .setMessage("输入下载链接后，点击“转存”即可确认文件并保存到网盘。\n\n"
-                        + "也可以打开 Civitai 或 Hugging Face 的模型信息页面。应用会自动识别页面中的模型文件，页面底部出现“立即转存”后即可一键转存。")
-                .setPositiveButton("知道了", null)
-                .show();
+        View content = AppDialog.infoSteps(this, new String[][]{
+                {"输入下载地址", "粘贴实际的文件下载地址，点击“转存”后确认保存位置。"},
+                {"浏览模型页面", "打开 Civitai 或 Hugging Face，发现文件后即可一键转存。"}
+        });
+        AppDialog.Controller dialog = AppDialog.create(this, "?", "如何使用云端转存？",
+                "两种方式都可以快速创建转存任务", Ui.BRAND, Ui.BRAND_SOFT,
+                content, null, "知道了");
+        dialog.setPositiveAction(v -> dialog.dismiss());
+        dialog.show();
     }
 
     private void showTasks() {
@@ -522,14 +511,24 @@ public class MainActivity extends Activity {
             clearParams.rightMargin = Ui.dp(this, 8);
             header.addView(clear, clearParams);
         }
-        TextView refresh = Ui.text(this, "↻", 23, Ui.BRAND, true);
+        TextView refresh = Ui.text(this, "刷新", 13, Ui.BRAND, true);
         refresh.setGravity(Gravity.CENTER);
-        refresh.setBackground(Ui.background(Ui.BRAND_SOFT, 16, this));
+        android.graphics.drawable.Drawable refreshIcon = getDrawable(R.drawable.ic_refresh).mutate();
+        refreshIcon.setTint(Ui.BRAND);
+        refreshIcon.setBounds(0, 0, Ui.dp(this, 18), Ui.dp(this, 18));
+        refresh.setCompoundDrawables(refreshIcon, null, null, null);
+        refresh.setCompoundDrawablePadding(Ui.dp(this, 5));
+        refresh.setPadding(Ui.dp(this, 10), 0, Ui.dp(this, 10), 0);
+        refresh.setMinWidth(0);
+        refresh.setMinimumWidth(0);
+        refresh.setContentDescription("刷新任务状态");
+        refresh.setBackgroundResource(R.drawable.refresh_button_background);
         refresh.setOnClickListener(v -> {
-            v.animate().rotationBy(360f).setDuration(480).start();
+            v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
             refreshTasks(true);
         });
-        header.addView(refresh, new LinearLayout.LayoutParams(Ui.dp(this, 44), Ui.dp(this, 44)));
+        header.addView(refresh, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 42)));
         page.addView(header);
 
         int active = 0, queued = 0, complete = 0;
@@ -543,12 +542,22 @@ public class MainActivity extends Activity {
                 : queued > 0 ? queued + " 个任务正在连接执行器" : "已完成 " + complete + " 个任务";
         TextView stats = Ui.text(this, stateText, 13, active > 0 || queued > 0 ? Ui.BRAND : Ui.MUTED, false);
         page.addView(stats, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 36)));
-        page.addView(filterBar());
 
         ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 18));
+        page.addView(filterBar(all, list, scroll));
+        renderTaskList(list, all);
+        scroll.addView(list);
+        page.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        replaceContent(page, animatePage);
+        scheduleTaskRefresh(900);
+    }
+
+    private void renderTaskList(LinearLayout list, List<TaskItem> all) {
+        list.removeAllViews();
         List<TaskItem> filtered = filter(all);
         if (filtered.isEmpty()) {
             TextView empty = Ui.text(this, "这里还没有任务", 15, Ui.MUTED, false);
@@ -557,27 +566,36 @@ public class MainActivity extends Activity {
         } else {
             for (TaskItem item : filtered) list.addView(taskRow(item));
         }
-        scroll.addView(list);
-        page.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        replaceContent(page, animatePage);
-        scheduleTaskRefresh(900);
     }
 
-    private View filterBar() {
+    private View filterBar(List<TaskItem> all, LinearLayout list, ScrollView scroll) {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setBackground(Ui.background(Color.rgb(241, 245, 249), 14, this));
+        renderTaskFilterTabs(bar, all, list, scroll);
+        return bar;
+    }
+
+    private void renderTaskFilterTabs(LinearLayout bar, List<TaskItem> all,
+                                      LinearLayout list, ScrollView scroll) {
+        bar.removeAllViews();
         String[][] filters = {{"all", "全部"}, {"active", "进行中"}, {"completed", "已完成"}, {"failed", "失败"}};
         for (String[] filter : filters) {
             TextView tab = Ui.text(this, filter[1], 13, filter[0].equals(taskFilter) ? Color.WHITE : Ui.MUTED, filter[0].equals(taskFilter));
             tab.setGravity(Gravity.CENTER);
             if (filter[0].equals(taskFilter)) tab.setBackground(Ui.background(Ui.BRAND, 12, this));
-            tab.setOnClickListener(v -> { taskFilter = filter[0]; showTasks(); });
+            tab.setOnClickListener(v -> {
+                if (filter[0].equals(taskFilter)) return;
+                v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                taskFilter = filter[0];
+                renderTaskFilterTabs(bar, all, list, scroll);
+                renderTaskList(list, all);
+                scroll.scrollTo(0, 0);
+            });
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, Ui.dp(this, 38), 1);
             params.setMargins(Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2));
             bar.addView(tab, params);
         }
-        return bar;
     }
 
     private List<TaskItem> filter(List<TaskItem> all) {
@@ -601,6 +619,7 @@ public class MainActivity extends Activity {
         TextView delete = Ui.text(this, "删除", 14, Color.WHITE, true);
         delete.setGravity(Gravity.CENTER);
         delete.setBackground(Ui.background(Ui.DANGER, 16, this));
+        delete.setAlpha(0f);
         delete.setContentDescription("删除任务 " + item.filename);
         FrameLayout.LayoutParams deleteParams = new FrameLayout.LayoutParams(
                 Ui.dp(this, 78), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END);
@@ -609,7 +628,6 @@ public class MainActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(Ui.background(Color.WHITE, 16, this));
-        card.setElevation(Ui.dp(this, 2));
         card.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 10), Ui.dp(this, 7));
 
         LinearLayout top = new LinearLayout(this);
@@ -652,13 +670,15 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 3));
         progressParams.topMargin = Ui.dp(this, 6);
         card.addView(progress, progressParams);
-        attachSwipeGesture(card, item, Ui.dp(this, 86), filename, action);
+        card.setTag(delete);
+        attachSwipeGesture(card, item, Ui.dp(this, 86), filename, action, delete);
         swipeContainer.addView(card, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         if (item.id.equals(expandedTaskId)) activateTaskFilename(item.id, filename);
         delete.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.CONFIRM);
             TaskStore.remove(this, item.id);
+            updateTaskBadge();
             openSwipeCard = null;
             Toast.makeText(this, "任务已删除", Toast.LENGTH_SHORT).show();
             if ("tasks".equals(currentTab)) showTasks(false);
@@ -672,7 +692,7 @@ public class MainActivity extends Activity {
     }
 
     private void attachSwipeGesture(View card, TaskItem item, int revealWidth,
-                                    TextView filename, View action) {
+                                    TextView filename, View action, View delete) {
         int touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         float[] down = new float[3];
         boolean[] swiping = {false};
@@ -681,9 +701,14 @@ public class MainActivity extends Activity {
                 case MotionEvent.ACTION_DOWN:
                     if (openSwipeCard != null && openSwipeCard != card) {
                         openSwipeCard.animate().translationX(0).setDuration(150).start();
+                        Object previousDelete = openSwipeCard.getTag();
+                        if (previousDelete instanceof View) {
+                            ((View) previousDelete).animate().alpha(0f).setDuration(120).start();
+                        }
                         openSwipeCard = null;
                     }
                     card.animate().cancel();
+                    delete.animate().cancel();
                     down[0] = event.getRawX();
                     down[1] = event.getRawY();
                     down[2] = card.getTranslationX();
@@ -699,16 +724,20 @@ public class MainActivity extends Activity {
                     if (swiping[0]) {
                         float target = Math.max(-revealWidth, Math.min(0, down[2] + dx));
                         card.setTranslationX(target);
+                        delete.setAlpha(Math.min(1f, Math.max(0f,
+                                -target / (revealWidth * 0.55f))));
                     }
                     return true;
                 case MotionEvent.ACTION_CANCEL:
-                    settleSwipe(card, revealWidth, card.getTranslationX() < -revealWidth * 0.42f);
+                    settleSwipe(card, delete, revealWidth,
+                            card.getTranslationX() < -revealWidth * 0.42f);
                     return true;
                 case MotionEvent.ACTION_UP:
                     if (swiping[0]) {
-                        settleSwipe(card, revealWidth, card.getTranslationX() < -revealWidth * 0.42f);
+                        settleSwipe(card, delete, revealWidth,
+                                card.getTranslationX() < -revealWidth * 0.42f);
                     } else if (card.getTranslationX() < 0) {
-                        settleSwipe(card, revealWidth, false);
+                        settleSwipe(card, delete, revealWidth, false);
                     } else {
                         activateTaskFilename(item.id, filename);
                         if (isPointInside(action, event.getRawX(), event.getRawY())) {
@@ -753,8 +782,9 @@ public class MainActivity extends Activity {
                 && bounds.contains(Math.round(rawX), Math.round(rawY));
     }
 
-    private void settleSwipe(View card, int revealWidth, boolean reveal) {
+    private void settleSwipe(View card, View delete, int revealWidth, boolean reveal) {
         card.animate().translationX(reveal ? -revealWidth : 0).setDuration(170).start();
+        delete.animate().alpha(reveal ? 1f : 0f).setDuration(150).start();
         if (reveal) {
             if (openSwipeCard != card) card.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
             openSwipeCard = card;
@@ -764,17 +794,21 @@ public class MainActivity extends Activity {
     }
 
     private void confirmClearTasks() {
-        new AlertDialog.Builder(this)
-                .setTitle("清空任务列表？")
-                .setMessage("所有任务记录将从当前设备移除，不会影响已经转存到网盘的文件。")
-                .setNegativeButton("取消", null)
-                .setPositiveButton("清空", (dialog, which) -> {
-                    taskPollHandler.removeCallbacks(taskPoll);
-                    TaskStore.clear(this);
-                    Toast.makeText(this, "任务列表已清空", Toast.LENGTH_SHORT).show();
-                    showTasks(false);
-                })
-                .show();
+        View content = AppDialog.messageCard(this,
+                "所有任务记录将从当前设备移除，不会影响已经转存到网盘的文件。",
+                Color.rgb(254, 242, 242));
+        AppDialog.Controller dialog = AppDialog.create(this, "!", "清空任务列表？",
+                "此操作只会清理本机任务记录", Ui.DANGER, Color.rgb(254, 242, 242),
+                content, "取消", "确认清空");
+        dialog.setPositiveAction(v -> {
+            dialog.dismiss();
+            taskPollHandler.removeCallbacks(taskPoll);
+            TaskStore.clear(this);
+            updateTaskBadge();
+            Toast.makeText(this, "任务列表已清空", Toast.LENGTH_SHORT).show();
+            showTasks(false);
+        });
+        dialog.show();
     }
 
     private int statusColor(TaskItem item) {
@@ -798,7 +832,7 @@ public class MainActivity extends Activity {
 
     private void scheduleTaskRefresh(long delayMs) {
         taskPollHandler.removeCallbacks(taskPoll);
-        if (!resumed || !"tasks".equals(currentTab)) return;
+        if (!resumed) return;
         for (TaskItem item : TaskStore.load(this)) {
             if (isRefreshable(item)) {
                 taskPollHandler.postDelayed(taskPoll, delayMs);
@@ -826,6 +860,7 @@ public class MainActivity extends Activity {
             if (isRefreshable(item)) active.add(item);
         }
         if (active.isEmpty()) {
+            updateTaskBadge();
             if (manual) Toast.makeText(this, "任务状态已是最新", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -835,6 +870,7 @@ public class MainActivity extends Activity {
         Runnable finishOne = () -> {
             if (remaining.decrementAndGet() != 0) return;
             taskRefreshInFlight = false;
+            updateTaskBadge();
             if ("tasks".equals(currentTab)) showTasks(false);
             scheduleTaskRefresh(2200);
         };

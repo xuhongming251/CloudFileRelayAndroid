@@ -37,6 +37,15 @@ export ANDROID_SDK_ROOT=/opt/homebrew/share/android-commandlinetools
 GITHUB_TOKEN=github_pat_xxx ./gradlew assembleRelease
 ```
 
+## 应用签名
+
+项目根目录的 `cloud-file-relay.keystore` 是本应用独立的发布证书。签名密码从不入库的
+`keystore.properties` 读取。debug 与 release 使用相同的包名和证书，因此两种构建可以
+通过 `adb install -r` 相互覆盖，并保留 GeckoView 登录态和本地任务数据。
+
+本地签名配置包含以下字段：`storeFile`、`storePassword`、`keyAlias`、`keyPassword`。
+缺少该文件时，debug 会回退到 Android 默认调试证书，release 则输出未签名包。
+
 ## 已实现
 
 - Civitai/Hugging Face 持久登录 WebView

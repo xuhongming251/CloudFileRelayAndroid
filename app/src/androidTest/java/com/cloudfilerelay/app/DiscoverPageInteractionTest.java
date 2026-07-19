@@ -20,7 +20,7 @@ public class DiscoverPageInteractionTest {
         UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         device.wakeUp();
         device.executeShellCommand("am start -W -n "
-                + "com.cloudfilerelay.app.debug/com.cloudfilerelay.app.MainActivity --es tab browse");
+                + "com.cloudfilerelay.app/com.cloudfilerelay.app.MainActivity --es tab browse");
 
         assertTrue(device.wait(Until.hasObject(By.text("发现模型")), 5_000));
         assertTrue(device.wait(Until.hasObject(By.textContains("个可转存模型")), 10_000));
@@ -33,5 +33,26 @@ public class DiscoverPageInteractionTest {
         assertTrue(device.hasObject(By.text("按匹配度排序")));
         assertNotNull(device.findObject(By.text("转存网盘")));
         device.executeShellCommand("screencap -p /sdcard/discover_search_verified.png");
+    }
+
+    @Test
+    public void tappingModelStartsSingleLineFilenameMarquee() throws Exception {
+        UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        device.wakeUp();
+        device.executeShellCommand("am start -W -n "
+                + "com.cloudfilerelay.app/com.cloudfilerelay.app.MainActivity --es tab browse");
+
+        assertTrue(device.wait(Until.hasObject(By.text("发现模型")), 5_000));
+        UiObject2 filename = device.wait(Until.findObject(
+                By.descStartsWith("发现模型文件名：")), 10_000);
+        assertNotNull(filename);
+        String fullName = filename.getText();
+        filename.click();
+
+        UiObject2 scrolling = device.wait(Until.findObject(
+                By.desc("正在滚动完整模型名：" + fullName)), 3_000);
+        assertNotNull(scrolling);
+        assertTrue(fullName.equals(scrolling.getText()));
+        assertTrue(scrolling.isSelected());
     }
 }

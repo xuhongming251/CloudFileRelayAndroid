@@ -19,6 +19,46 @@ import org.junit.runner.RunWith;
 @RunWith(AndroidJUnit4.class)
 public class TaskListInteractionTest {
     @Test
+    public void taskBadgeCountsOnlyActiveTasks() throws Exception {
+        Context target = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        removeBadgeTestTasks(target);
+        int baseline = activeTaskCount(target);
+        TaskItem first = TaskStore.add(target, "badge_active_one.safetensors",
+                "Civitai", "quark", "1 MB", "");
+        TaskItem second = TaskStore.add(target, "badge_active_two.safetensors",
+                "Hugging Face", "quark", "2 MB", "");
+        TaskItem completed = TaskStore.add(target, "badge_completed.safetensors",
+                "Civitai", "quark", "3 MB", "");
+        completed.status = TaskItem.COMPLETED;
+        completed.progress = 100;
+        TaskStore.upsert(target, completed);
+
+        UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        try {
+            restartMainActivity(device);
+            int expected = baseline + 2;
+            UiObject2 badge = device.wait(Until.findObject(
+                    By.res("com.cloudfilerelay.app", "task_badge")), 4_000);
+            assertNotNull(badge);
+            assertTrue((expected > 99 ? "99+" : String.valueOf(expected)).equals(badge.getText()));
+            assertTrue(("正在进行 " + expected + " 个任务").equals(badge.getContentDescription()));
+
+            second.status = TaskItem.COMPLETED;
+            second.progress = 100;
+            TaskStore.upsert(target, second);
+            restartMainActivity(device);
+            int updated = baseline + 1;
+            UiObject2 updatedBadge = device.wait(Until.findObject(
+                    By.res("com.cloudfilerelay.app", "task_badge")), 4_000);
+            assertNotNull(updatedBadge);
+            assertTrue((updated > 99 ? "99+" : String.valueOf(updated)).equals(updatedBadge.getText()));
+        } finally {
+            removeBadgeTestTasks(target);
+            restartMainActivity(device);
+        }
+    }
+
+    @Test
     public void clearConfirmationAndSwipeDeleteAreReachable() throws Exception {
         Context target = InstrumentationRegistry.getInstrumentation().getTargetContext();
         TaskItem testTask = TaskStore.add(target, "swipe_delete_test.safetensors",
@@ -32,7 +72,7 @@ public class TaskListInteractionTest {
         try {
             UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
             device.wakeUp();
-            device.executeShellCommand("am start -W -n com.cloudfilerelay.app.debug/com.cloudfilerelay.app.MainActivity --es tab tasks");
+            device.executeShellCommand("am start -W -n com.cloudfilerelay.app/com.cloudfilerelay.app.MainActivity --es tab tasks");
             assertTrue(device.wait(Until.hasObject(By.text("转存任务")), 4_000));
 
             UiObject2 filenameView = device.findObject(By.text(filename));
@@ -75,7 +115,7 @@ public class TaskListInteractionTest {
             UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
             device.wakeUp();
             device.executeShellCommand("am start -W -n "
-                    + "com.cloudfilerelay.app.debug/com.cloudfilerelay.app.MainActivity --es tab tasks");
+                    + "com.cloudfilerelay.app/com.cloudfilerelay.app.MainActivity --es tab tasks");
             assertTrue(device.wait(Until.hasObject(By.text("转存任务")), 4_000));
 
             UiObject2 filenameView = device.findObject(By.text(filename));
@@ -90,6 +130,30 @@ public class TaskListInteractionTest {
             assertTrue("滚动中的文件名应处于 selected 状态", scrolling.isSelected());
         } finally {
             TaskStore.remove(target, testTask.id);
+        }
+    }
+
+    private static int activeTaskCount(Context context) {
+        int count = 0;
+        for (TaskItem item : TaskStore.load(context)) {
+            if (!TaskItem.COMPLETED.equals(item.status)
+                    && !TaskItem.FAILED.equals(item.status)
+                    && !TaskItem.SERVICE_REQUIRED.equals(item.status)) count++;
+        }
+        return count;
+    }
+
+    private static void restartMainActivity(UiDevice device) throws Exception {
+        device.pressHome();
+        Thread.sleep(250);
+        device.executeShellCommand("am start -W -n "
+                + "com.cloudfilerelay.app/com.cloudfilerelay.app.MainActivity");
+        assertTrue(device.wait(Until.hasObject(By.text("云端转存")), 4_000));
+    }
+
+    private static void removeBadgeTestTasks(Context context) {
+        for (TaskItem item : TaskStore.load(context)) {
+            if (item.filename.startsWith("badge_")) TaskStore.remove(context, item.id);
         }
     }
 }

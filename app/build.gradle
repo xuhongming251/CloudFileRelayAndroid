@@ -2,6 +2,15 @@ plugins {
     id "com.android.application"
 }
 
+// Keep signing credentials outside Git while using the same project-specific
+// certificate for debug and release. Without the local properties file debug
+// falls back to the Android debug key and release remains unsigned.
+def signingPropertiesFile = rootProject.file("keystore.properties")
+def signingProperties = new Properties()
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withInputStream { signingProperties.load(it) }
+}
+
 def pcIndex = rootProject.file("../CloudFileRelay/src/main/index.js")
 def localDesktopToken = ""
 if (pcIndex.exists()) {
@@ -52,12 +61,23 @@ android {
         buildConfig true
     }
 
+    signingConfigs {
+        shared {
+            if (signingPropertiesFile.exists()) {
+                storeFile rootProject.file(signingProperties.getProperty("storeFile"))
+                storePassword signingProperties.getProperty("storePassword")
+                keyAlias signingProperties.getProperty("keyAlias")
+                keyPassword signingProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
-            applicationIdSuffix ".debug"
-            versionNameSuffix "-debug"
+            if (signingPropertiesFile.exists()) signingConfig signingConfigs.shared
         }
         release {
+            if (signingPropertiesFile.exists()) signingConfig signingConfigs.shared
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }

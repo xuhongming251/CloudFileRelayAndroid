@@ -103,9 +103,9 @@
     const sourceUrl = message.url;
     try {
       const response = await request(sourceUrl, "GET", {Range: "bytes=0-0"});
-      if (response.status === 401 || response.status === 403) throw new Error("请先在当前网站完成登录");
+      if (response.status === 401 || response.status === 403) throw new Error("获取下载地址失败，请先登录！");
       if (isAuthenticationPage(response.url) || isHtmlResponse(response)) {
-        throw new Error("Civitai 登录状态未用于下载，请在当前页面重新登录后再试");
+        throw new Error("获取下载地址失败，请先登录！");
       }
       if (!response.ok && response.status !== 206) throw new Error("下载地址暂不可用（" + response.status + "）");
       let finalUrl = response.url || sourceUrl;

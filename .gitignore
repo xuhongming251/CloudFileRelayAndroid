@@ -8,6 +8,7 @@
 .idea/
 *.iml
 local.properties
+keystore.properties
 .DS_Store
 
 # Generated packages and device-test evidence

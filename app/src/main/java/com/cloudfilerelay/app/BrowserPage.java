@@ -1,7 +1,6 @@
 package com.cloudfilerelay.app;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Intent;
 import android.graphics.Color;
@@ -41,12 +40,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 final class BrowserPage {
     private final Activity activity;
     private final View root;
     private final Runnable onClose;
     private final Runnable onOpenTasks;
+    private final Runnable onTasksChanged;
     private View browserBack;
     private GeckoView geckoView;
     private GeckoSession session;
@@ -65,11 +66,12 @@ final class BrowserPage {
     private boolean detectionDismissed;
 
     BrowserPage(Activity activity, String requestedUrl, boolean directDownloadMode,
-                Runnable onClose, Runnable onOpenTasks) {
+                Runnable onClose, Runnable onOpenTasks, Runnable onTasksChanged) {
         this.activity = activity;
         this.directDownloadMode = directDownloadMode;
         this.onClose = onClose;
         this.onOpenTasks = onOpenTasks;
+        this.onTasksChanged = onTasksChanged;
         if (requestedUrl == null || !requestedUrl.startsWith("http")) {
             requestedUrl = "https://civitai.com/";
         }
@@ -192,7 +194,7 @@ final class BrowserPage {
 
         if (directDownloadMode) {
             PageDetector.FileCandidate direct = new PageDetector.FileCandidate(
-                    PageDetector.filenameForDirectUrl(currentUrl), currentUrl, "");
+                    PageDetector.filenameForDirectUrl(currentUrl), currentUrl, "", false, true);
             candidates.add(direct);
             selectedUrls.add(direct.url);
             address.setText(displayHost(currentUrl));
@@ -246,11 +248,20 @@ final class BrowserPage {
             selected = selectedCandidates();
         }
         PageDetector.FileCandidate first = selected.get(0);
-        String count = candidates.size() > 1 ? " · 共 " + candidates.size() + " 个文件" : "";
+        int modelFileCount = 0;
+        boolean hasPackageOption = false;
+        for (PageDetector.FileCandidate candidate : candidates) {
+            if (candidate.packageAll) hasPackageOption = true;
+            else modelFileCount++;
+        }
+        String count = modelFileCount > 0 ? " · 共 " + modelFileCount + " 个模型文件" : "";
         String size = first.size == null || first.size.isEmpty() ? "" : " · " + first.size;
-        String selectedText = selected.size() > 1 ? " · 已选 " + selected.size() + " 个" : "";
-        detectedFile.setText(String.format(java.util.Locale.getDefault(), "%s%s%s%s", first.name, size, count, selectedText));
-        selectFileButton.setText(candidates.size() > 1 ? "选择文件" : "查看文件");
+        String selectedText;
+        if (first.packageAll) selectedText = " · 打包全部文件";
+        else selectedText = selected.size() > 1 ? " · 已选 " + selected.size() + " 个" : "";
+        detectedFile.setText(String.format(java.util.Locale.getDefault(), "%s%s%s%s",
+                first.name, size, count, selectedText));
+        selectFileButton.setText(hasPackageOption || candidates.size() > 1 ? "选择文件" : "查看文件");
         startTransferButton.setText("立即转存（" + selected.size() + "）");
         startTransferButton.setEnabled(!selected.isEmpty());
         startTransferButton.setAlpha(selected.isEmpty() ? 0.45f : 1f);
@@ -278,8 +289,8 @@ final class BrowserPage {
         header.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout titleBox = new LinearLayout(activity);
         titleBox.setOrientation(LinearLayout.VERTICAL);
-        titleBox.addView(Ui.text(activity, "选择模型文件", 21, Ui.TEXT, true));
-        titleBox.addView(Ui.text(activity, "可同时选择多个文件转存", 12, Ui.MUTED, false));
+        titleBox.addView(Ui.text(activity, "选择转存内容", 21, Ui.TEXT, true));
+        titleBox.addView(Ui.text(activity, "模型文件可多选，打包全部文件为单选", 12, Ui.MUTED, false));
         header.addView(titleBox, new LinearLayout.LayoutParams(0, Ui.dp(activity, 58), 1));
         TextView selectAll = Ui.text(activity, "全选", 14, Ui.BRAND, true);
         selectAll.setGravity(Gravity.CENTER);
@@ -292,6 +303,21 @@ final class BrowserPage {
         titleBox.setOnTouchListener(dismissGesture);
 
         LinkedHashSet<String> draftSelection = new LinkedHashSet<>(selectedUrls);
+        ArrayList<PageDetector.FileCandidate> modelFiles = new ArrayList<>();
+        ArrayList<PageDetector.FileCandidate> packageFiles = new ArrayList<>();
+        for (PageDetector.FileCandidate candidate : candidates) {
+            if (candidate.packageAll) packageFiles.add(candidate);
+            else modelFiles.add(candidate);
+        }
+        PageDetector.FileCandidate packageFile = packageFiles.isEmpty() ? null : packageFiles.get(0);
+        if (packageFile != null && draftSelection.contains(packageFile.url)) {
+            draftSelection.clear();
+            draftSelection.add(packageFile.url);
+        }
+        ArrayList<PageDetector.FileCandidate> displayFiles = new ArrayList<>();
+        displayFiles.addAll(packageFiles);
+        displayFiles.addAll(modelFiles);
+
         LinearLayout rows = new LinearLayout(activity);
         rows.setOrientation(LinearLayout.VERTICAL);
         ArrayList<LinearLayout> rowViews = new ArrayList<>();
@@ -300,7 +326,9 @@ final class BrowserPage {
         ScrollView scroll = new ScrollView(activity);
         scroll.setVerticalScrollBarEnabled(false);
         scroll.addView(rows);
-        int listHeight = Math.min(Ui.dp(activity, 410), Ui.dp(activity, Math.max(62, candidates.size() * 49)));
+        int sectionCount = (packageFiles.isEmpty() ? 0 : 1) + (modelFiles.isEmpty() ? 0 : 1);
+        int listHeight = Math.min(Ui.dp(activity, 430),
+                Ui.dp(activity, Math.max(92, displayFiles.size() * 49 + sectionCount * 31)));
         LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, listHeight);
         scrollParams.topMargin = Ui.dp(activity, 10);
         scrollParams.bottomMargin = Ui.dp(activity, 12);
@@ -315,8 +343,8 @@ final class BrowserPage {
         sheet.addView(done, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(activity, 54)));
 
         Runnable refreshRows = () -> {
-            for (int i = 0; i < candidates.size(); i++) {
-                boolean checked = draftSelection.contains(candidates.get(i).url);
+            for (int i = 0; i < displayFiles.size(); i++) {
+                boolean checked = draftSelection.contains(displayFiles.get(i).url);
                 checks.get(i).setChecked(checked);
                 rowViews.get(i).setBackground(checked
                         ? Ui.bordered(Ui.BRAND_SOFT, Color.rgb(199, 210, 254), 16, activity)
@@ -325,11 +353,33 @@ final class BrowserPage {
             boolean hasSelection = !draftSelection.isEmpty();
             done.setEnabled(hasSelection);
             done.setAlpha(hasSelection ? 1f : 0.45f);
-            done.setText(hasSelection ? "完成 · 已选 " + draftSelection.size() + " 个文件" : "至少选择一个文件");
-            selectAll.setText(draftSelection.size() == candidates.size() ? "取消全选" : "全选");
+            boolean packageSelected = packageFile != null && draftSelection.contains(packageFile.url);
+            done.setText(!hasSelection ? "至少选择一个文件"
+                    : packageSelected ? "完成 · 打包全部文件"
+                    : "完成 · 已选 " + draftSelection.size() + " 个文件");
+            boolean allModelsSelected = !modelFiles.isEmpty();
+            for (PageDetector.FileCandidate modelFile : modelFiles) {
+                if (!draftSelection.contains(modelFile.url)) {
+                    allModelsSelected = false;
+                    break;
+                }
+            }
+            selectAll.setText(allModelsSelected ? "取消全选" : "全选");
         };
 
-        for (PageDetector.FileCandidate file : candidates) {
+        for (int fileIndex = 0; fileIndex < displayFiles.size(); fileIndex++) {
+            PageDetector.FileCandidate file = displayFiles.get(fileIndex);
+            if (fileIndex == 0 && file.packageAll) {
+                TextView section = Ui.text(activity, "打包全部文件", 12, Ui.MUTED, true);
+                section.setGravity(Gravity.CENTER_VERTICAL);
+                rows.addView(section, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(activity, 31)));
+            } else if (!file.packageAll && (fileIndex == 0 || displayFiles.get(fileIndex - 1).packageAll)) {
+                TextView section = Ui.text(activity, "模型文件列表", 12, Ui.MUTED, true);
+                section.setGravity(Gravity.CENTER_VERTICAL);
+                rows.addView(section, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(activity, 31)));
+            }
             LinearLayout row = new LinearLayout(activity);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
@@ -358,14 +408,34 @@ final class BrowserPage {
             }
 
             CheckBox check = new CheckBox(activity);
-            check.setClickable(false);
             check.setButtonTintList(android.content.res.ColorStateList.valueOf(Ui.BRAND));
             row.addView(check, new LinearLayout.LayoutParams(Ui.dp(activity, 40), Ui.dp(activity, 40)));
 
-            row.setOnClickListener(v -> {
-                if (!draftSelection.remove(file.url)) draftSelection.add(file.url);
+            View.OnClickListener selectionListener = v -> {
+                if (file.packageAll) {
+                    draftSelection.clear();
+                    draftSelection.add(file.url);
+                } else {
+                    if (packageFile != null) draftSelection.remove(packageFile.url);
+                    if (!draftSelection.remove(file.url)) draftSelection.add(file.url);
+                }
                 refreshRows.run();
+            };
+            row.setOnClickListener(selectionListener);
+            int rowTapSlop = ViewConfiguration.get(activity).getScaledTouchSlop();
+            float[] rowTouchStart = new float[2];
+            nameScroller.setOnTouchListener((v, event) -> {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    rowTouchStart[0] = event.getRawX();
+                    rowTouchStart[1] = event.getRawY();
+                } else if (event.getActionMasked() == MotionEvent.ACTION_UP
+                        && Math.abs(event.getRawX() - rowTouchStart[0]) <= rowTapSlop
+                        && Math.abs(event.getRawY() - rowTouchStart[1]) <= rowTapSlop) {
+                    selectionListener.onClick(v);
+                }
+                return false;
             });
+            check.setOnClickListener(selectionListener);
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(activity, 46));
             rowParams.bottomMargin = Ui.dp(activity, 3);
             rows.addView(row, rowParams);
@@ -373,11 +443,20 @@ final class BrowserPage {
             checks.add(check);
         }
 
+        selectAll.setVisibility(modelFiles.isEmpty() ? View.GONE : View.VISIBLE);
         selectAll.setOnClickListener(v -> {
-            if (draftSelection.size() == candidates.size()) draftSelection.clear();
-            else {
+            boolean allModelsSelected = !modelFiles.isEmpty();
+            for (PageDetector.FileCandidate modelFile : modelFiles) {
+                if (!draftSelection.contains(modelFile.url)) {
+                    allModelsSelected = false;
+                    break;
+                }
+            }
+            if (allModelsSelected) {
                 draftSelection.clear();
-                for (PageDetector.FileCandidate file : candidates) draftSelection.add(file.url);
+            } else {
+                draftSelection.clear();
+                for (PageDetector.FileCandidate file : modelFiles) draftSelection.add(file.url);
             }
             refreshRows.run();
         });
@@ -461,6 +540,7 @@ final class BrowserPage {
     private void showTransferDialog(List<PageDetector.FileCandidate> files) {
         PageDetector.FileCandidate file = files.get(0);
         boolean multiple = files.size() > 1;
+        boolean packageAll = !multiple && file.packageAll;
         LinearLayout form = new LinearLayout(activity);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(Ui.dp(activity, 22), Ui.dp(activity, 6), Ui.dp(activity, 22), 0);
@@ -474,7 +554,7 @@ final class BrowserPage {
         form.addView(summary, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(activity, 64)));
 
         EditText filename = null;
-        if (!multiple) {
+        if (!multiple && !packageAll) {
             TextView filenameLabel = Ui.text(activity, "文件名", 12, Ui.MUTED, true);
             form.addView(filenameLabel, marginTop(36, 10));
             filename = new EditText(activity);
@@ -485,7 +565,10 @@ final class BrowserPage {
             filename.setSelectAllOnFocus(false);
             form.addView(filename, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(activity, 50)));
         } else {
-            TextView naming = Ui.text(activity, "每个文件将保留识别到的原始文件名", 12, Ui.MUTED, false);
+            String namingText = packageAll
+                    ? "将打包仓库全部文件，文件名固定为 " + file.name
+                    : "每个文件将保留识别到的原始文件名";
+            TextView naming = Ui.text(activity, namingText, 12, Ui.MUTED, false);
             form.addView(naming, marginTop(36, 8));
         }
 
@@ -512,16 +595,15 @@ final class BrowserPage {
         remember.setChecked(true);
         form.addView(remember, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(activity, 44)));
 
-        AlertDialog dialog = new AlertDialog.Builder(activity)
-                .setTitle("确认转存")
-                .setView(form)
-                .setNegativeButton("取消", null)
-                .setPositiveButton(multiple ? "转存 " + files.size() + " 个文件" : "开始转存", null)
-                .create();
+        String actionText = multiple ? "转存 " + files.size() + " 个文件"
+                : packageAll ? "开始打包转存" : "开始转存";
+        AppDialog.Controller dialog = AppDialog.create(activity, "↑", "确认转存",
+                multiple ? "已选择 " + files.size() + " 个文件" : "确认文件名与保存位置",
+                Ui.BRAND, Ui.BRAND_SOFT, form, "取消", actionText);
         EditText finalFilename = filename;
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String finalName = multiple ? null : finalFilename.getText().toString().trim();
-            if (!multiple && finalName.isEmpty()) {
+        dialog.setPositiveAction(v -> {
+            String finalName = multiple || packageAll ? null : finalFilename.getText().toString().trim();
+            if (!multiple && !packageAll && finalName.isEmpty()) {
                 finalFilename.setError("请输入文件名");
                 return;
             }
@@ -530,9 +612,8 @@ final class BrowserPage {
             if (remember.isChecked()) activity.getSharedPreferences("relay_ui", Activity.MODE_PRIVATE).edit().putString("target", target).apply();
             dialog.dismiss();
             beginTransfer(files, finalName, target);
-        }));
+        });
         dialog.show();
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Ui.BRAND);
     }
 
     private LinearLayout.LayoutParams marginTop(int heightDp, int topDp) {
@@ -542,11 +623,16 @@ final class BrowserPage {
     }
 
     private void beginTransfer(List<PageDetector.FileCandidate> files, String singleFilename, String target) {
+        boolean packageAll = files.size() == 1 && files.get(0).packageAll;
+        boolean originalUrl = files.size() == 1 && files.get(0).submitOriginalUrl;
         Toast.makeText(activity, files.size() > 1
-                ? "正在创建 " + files.size() + " 个转存任务…" : "正在获取下载地址…", Toast.LENGTH_SHORT).show();
+                ? "正在创建 " + files.size() + " 个转存任务…"
+                : packageAll ? "正在创建仓库打包任务…"
+                : originalUrl ? "正在创建转存任务…" : "正在获取下载地址…", Toast.LENGTH_SHORT).show();
         AtomicInteger remaining = new AtomicInteger(files.size());
         AtomicInteger created = new AtomicInteger();
         AtomicInteger errors = new AtomicInteger();
+        AtomicReference<String> lastResolveError = new AtomicReference<>("");
 
         Runnable finishOne = () -> {
             if (remaining.decrementAndGet() != 0) return;
@@ -556,32 +642,26 @@ final class BrowserPage {
                         Toast.LENGTH_SHORT).show();
                 openTaskList();
             } else {
-                Toast.makeText(activity, "未能创建转存任务，请重试", Toast.LENGTH_LONG).show();
+                String message = lastResolveError.get();
+                Toast.makeText(activity, message.isEmpty()
+                        ? "未能创建转存任务，请重试" : message, Toast.LENGTH_LONG).show();
             }
         };
 
         for (PageDetector.FileCandidate file : files) {
+            if (file.packageAll || file.submitOriginalUrl) {
+                submitTransfer(file, files.size(), singleFilename, target, file.url,
+                        created, errors, finishOne);
+                continue;
+            }
             DownloadResolver.resolve(session, file.url, new DownloadResolver.Callback() {
                 @Override public void onResolved(String finalUrl) {
-                    String provider = PageDetector.providerFor(currentUrl);
-                    if ("Web".equals(provider)) provider = file.url.contains("civitai.com") ? "Civitai" : "Hugging Face";
-                    String filename = files.size() == 1 && singleFilename != null ? singleFilename : file.name;
-                    TaskItem task = TaskStore.add(activity, filename, provider, target, file.size, finalUrl);
-                    RelayClient.submit(activity, task, finalUrl, new RelayClient.Callback() {
-                        @Override public void onSuccess(TaskItem item) {
-                            created.incrementAndGet();
-                            finishOne.run();
-                        }
-
-                        @Override public void onError(TaskItem item, String message) {
-                            created.incrementAndGet();
-                            errors.incrementAndGet();
-                            finishOne.run();
-                        }
-                    });
+                    submitTransfer(file, files.size(), singleFilename, target, finalUrl,
+                            created, errors, finishOne);
                 }
 
                 @Override public void onError(String message) {
+                    lastResolveError.set(message == null ? "" : message);
                     errors.incrementAndGet();
                     finishOne.run();
                 }
@@ -589,8 +669,38 @@ final class BrowserPage {
         }
     }
 
+    private void submitTransfer(PageDetector.FileCandidate file, int selectedCount,
+                                String singleFilename, String target, String downloadUrl,
+                                AtomicInteger created, AtomicInteger errors, Runnable finishOne) {
+        String provider = PageDetector.providerFor(currentUrl);
+        if ("Web".equals(provider)) {
+            provider = file.url.contains("civitai.com") ? "Civitai" : "Hugging Face";
+        }
+        String filename = selectedCount == 1 && singleFilename != null ? singleFilename : file.name;
+        TaskItem task = TaskStore.add(activity, filename, provider, target, file.size, downloadUrl);
+        notifyTasksChanged();
+        RelayClient.submit(activity, task, downloadUrl, new RelayClient.Callback() {
+            @Override public void onSuccess(TaskItem item) {
+                notifyTasksChanged();
+                created.incrementAndGet();
+                finishOne.run();
+            }
+
+            @Override public void onError(TaskItem item, String message) {
+                notifyTasksChanged();
+                created.incrementAndGet();
+                errors.incrementAndGet();
+                finishOne.run();
+            }
+        });
+    }
+
     private void openTaskList() {
         if (onOpenTasks != null) onOpenTasks.run();
+    }
+
+    private void notifyTasksChanged() {
+        if (onTasksChanged != null) onTasksChanged.run();
     }
 
     void handleBack() {

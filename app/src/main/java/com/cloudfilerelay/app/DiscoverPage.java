@@ -11,9 +11,11 @@ import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.BaseAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -58,6 +60,7 @@ final class DiscoverPage {
     private final Runnable delayedSearch = this::runSearch;
     private final Runnable automaticCheck = () -> refresh(false);
     private List<ModelCatalogItem> allItems = new ArrayList<>();
+    private String scrollingModelKey = "";
     private boolean active;
     private boolean checking;
 
@@ -86,13 +89,22 @@ final class DiscoverPage {
                 ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(activity, 20)));
         header.addView(heading, new LinearLayout.LayoutParams(0, Ui.dp(activity, 86), 1));
 
-        refreshButton = Ui.text(activity, "↻", 25, Ui.TEXT, false);
+        refreshButton = Ui.text(activity, "刷新", 13, Ui.BRAND, true);
         refreshButton.setGravity(Gravity.CENTER);
+        android.graphics.drawable.Drawable refreshIcon = activity.getDrawable(R.drawable.ic_refresh).mutate();
+        refreshIcon.setTint(Ui.BRAND);
+        refreshIcon.setBounds(0, 0, Ui.dp(activity, 18), Ui.dp(activity, 18));
+        refreshButton.setCompoundDrawables(refreshIcon, null, null, null);
+        refreshButton.setCompoundDrawablePadding(Ui.dp(activity, 5));
+        refreshButton.setPadding(Ui.dp(activity, 10), 0, Ui.dp(activity, 10), 0);
+        refreshButton.setMinWidth(0);
+        refreshButton.setMinimumWidth(0);
         refreshButton.setContentDescription("手动刷新模型列表");
-        refreshButton.setBackground(Ui.bordered(Color.WHITE, Ui.BORDER, 23, activity));
+        refreshButton.setBackgroundResource(R.drawable.refresh_button_background);
         refreshButton.setOnClickListener(v -> refresh(true));
         header.addView(refreshButton,
-                new LinearLayout.LayoutParams(Ui.dp(activity, 46), Ui.dp(activity, 46)));
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Ui.dp(activity, 42)));
         page.addView(header, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(activity, 92)));
 
@@ -195,13 +207,32 @@ final class DiscoverPage {
             @Override public void afterTextChanged(Editable s) {}
         });
         searchInput.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                main.removeCallbacks(delayedSearch);
-                runSearch();
+            boolean submitAction = actionId == EditorInfo.IME_ACTION_SEARCH
+                    || actionId == EditorInfo.IME_ACTION_DONE
+                    || actionId == EditorInfo.IME_ACTION_GO
+                    || actionId == EditorInfo.IME_ACTION_SEND
+                    || actionId == EditorInfo.IME_ACTION_UNSPECIFIED;
+            boolean enterKey = event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER;
+            if (submitAction || enterKey) {
+                if (event == null || event.getAction() == KeyEvent.ACTION_DOWN) {
+                    submitSearchAndHideKeyboard();
+                }
                 return true;
             }
             return false;
         });
+    }
+
+    private void submitSearchAndHideKeyboard() {
+        main.removeCallbacks(delayedSearch);
+        runSearch();
+        searchInput.clearFocus();
+        page.requestFocus();
+        InputMethodManager keyboard = (InputMethodManager) activity.getSystemService(
+                Activity.INPUT_METHOD_SERVICE);
+        if (keyboard != null) {
+            keyboard.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
+        }
     }
 
     View view() { return page; }
@@ -239,7 +270,6 @@ final class DiscoverPage {
         }
         checking = true;
         refreshButton.setAlpha(0.55f);
-        refreshButton.animate().rotationBy(360f).setDuration(520).start();
         if (allItems.isEmpty()) showState(true, "正在下载模型列表…");
         else catalogStatus.setText(formatCount(allItems.size()) + " 个可转存模型 · 正在检查更新…");
         repository.refresh(manual, result -> {
@@ -440,9 +470,33 @@ final class DiscoverPage {
                     : "onnx".equals(item.extension) ? Color.rgb(14, 165, 233) : Ui.BRAND;
             holder.badge.setBackground(Ui.background(badgeColor, 11, activity));
             holder.filename.setText(item.filename);
+            String modelKey = item.shareUrl.isEmpty() ? item.filename : item.shareUrl;
+            boolean scrolling = modelKey.equals(scrollingModelKey);
+            holder.filename.setSelected(false);
+            holder.filename.scrollTo(0, 0);
+            holder.filename.setHorizontallyScrolling(scrolling);
+            holder.filename.setSingleLine(scrolling);
+            holder.filename.setMaxLines(scrolling ? 1 : 2);
+            holder.filename.setEllipsize(scrolling
+                    ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.END);
+            holder.filename.setMarqueeRepeatLimit(-1);
+            holder.filename.setTag(modelKey);
+            holder.filename.setContentDescription((scrolling
+                    ? "正在滚动完整模型名：" : "发现模型文件名：") + item.filename);
+            if (scrolling) {
+                holder.filename.postDelayed(() -> {
+                    if (modelKey.equals(scrollingModelKey)
+                            && modelKey.equals(holder.filename.getTag())) {
+                        holder.filename.setSelected(true);
+                    }
+                }, 120);
+            }
             holder.time.setText(relativeTime(item.completedAtMillis).replace("更新", ""));
-            holder.row.setContentDescription(item.filename + "，转存网盘");
-            holder.row.setOnClickListener(v -> openShare(item));
+            holder.row.setContentDescription("点击查看完整模型名：" + item.filename);
+            holder.row.setOnClickListener(v -> {
+                scrollingModelKey = modelKey;
+                notifyDataSetChanged();
+            });
             holder.transfer.setOnClickListener(v -> openShare(item));
             return convertView;
         }

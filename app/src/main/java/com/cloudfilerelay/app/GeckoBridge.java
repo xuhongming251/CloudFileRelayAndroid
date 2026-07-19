@@ -177,8 +177,7 @@ final class GeckoBridge {
                         pending.url, json.optString("url", pending.url));
                 String contentType = json.optString("contentType").toLowerCase(java.util.Locale.ROOT);
                 if (isInvalidDownloadResult(pending.url, resolvedUrl, contentType)) {
-                    completeError(requestId,
-                            "未获取到真实模型文件，请确认已在当前 Civitai 页面登录后重试");
+                    completeError(requestId, "获取下载地址失败，请先登录！");
                     return;
                 }
                 pendingResolves.remove(requestId);

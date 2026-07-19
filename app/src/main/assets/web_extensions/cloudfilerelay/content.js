@@ -2,10 +2,13 @@
   "use strict";
 
   let lastPayload = "";
-  let modelId = "";
+  let civitaiSelectionKey = "";
+  let civitaiRefreshSequence = 0;
   let apiFiles = [];
   let huggingFaceTreeKey = "";
+  let huggingFaceRefreshSequence = 0;
   let huggingFaceFiles = [];
+  let huggingFaceFilesReady = false;
   let nativePort = null;
 
   function isAuthenticationPage(url) {
@@ -35,10 +38,10 @@
         cache: "no-store"
       });
       if (response.status === 401 || response.status === 403) {
-        throw new Error("请先在当前网站完成登录");
+        throw new Error("获取下载地址失败，请先登录！");
       }
       if (isAuthenticationPage(response.url) || isHtmlResponse(response)) {
-        throw new Error("Civitai 登录状态未用于下载，请在当前页面重新登录后再试");
+        throw new Error("获取下载地址失败，请先登录！");
       }
       if (!response.ok && response.status !== 206) {
         throw new Error("下载地址暂不可用（" + response.status + "）");
@@ -125,61 +128,116 @@
     }
   }
 
+  function huggingFaceRepositoryInfo() {
+    if (location.hostname !== "huggingface.co") return null;
+    const parts = location.pathname.split("/").filter(Boolean);
+    if (parts.length < 2) return null;
+    const reserved = new Set([
+      "models", "datasets", "spaces", "docs", "settings", "login", "join",
+      "organizations", "new", "tasks", "posts", "blog", "pricing", "enterprise"
+    ]);
+    if (reserved.has(parts[0].toLowerCase())) return null;
+    let repositoryName;
+    try {
+      repositoryName = decodeURIComponent(parts[1]);
+    } catch (_) {
+      repositoryName = parts[1];
+    }
+    if (!repositoryName) return null;
+    return {
+      repo: parts.slice(0, 2).join("/"),
+      rootUrl: location.origin + "/" + parts.slice(0, 2).join("/"),
+      archiveName: repositoryName + ".zip"
+    };
+  }
+
+  function selectedCivitaiVersionId() {
+    try {
+      const anchors = Array.from(document.querySelectorAll('a[href*="/api/download/models/"]'));
+      const visible = anchors.find(anchor => anchor.getClientRects().length > 0) || anchors[0];
+      const match = visible && visible.href.match(/\/api\/download\/models\/(\d+)/);
+      if (match) return match[1];
+      return new URL(location.href).searchParams.get("modelVersionId") || "";
+    } catch (_) {
+      return "";
+    }
+  }
+
   async function refreshCivitaiFiles() {
     const match = location.pathname.match(/\/models\/(\d+)/);
     if (!match) {
-      modelId = "";
+      civitaiSelectionKey = "";
+      civitaiRefreshSequence++;
       apiFiles = [];
       return;
     }
-    if (modelId === match[1]) return;
-    modelId = match[1];
+    const currentModelId = match[1];
+    const selectedVersion = selectedCivitaiVersionId();
+    const selectionKey = currentModelId + ":" + selectedVersion;
+    if (civitaiSelectionKey === selectionKey) return;
+    civitaiSelectionKey = selectionKey;
+    const refreshSequence = ++civitaiRefreshSequence;
     apiFiles = [];
     try {
-      const anchor = document.querySelector('a[href*="/api/download/models/"]');
-      const anchorMatch = anchor && anchor.href.match(/\/api\/download\/models\/(\d+)/);
-      const selectedVersion = anchorMatch ? anchorMatch[1] : new URL(location.href).searchParams.get("modelVersionId");
       const result = await browser.runtime.sendMessage({
         type: "loadCivitaiFiles",
-        modelId,
+        modelId: currentModelId,
         versionId: selectedVersion || ""
       });
+      if (refreshSequence !== civitaiRefreshSequence || civitaiSelectionKey !== selectionKey) return;
       apiFiles = result && Array.isArray(result.files) ? result.files : [];
       detect();
     } catch (_) {
-      apiFiles = [];
+      if (refreshSequence === civitaiRefreshSequence && civitaiSelectionKey === selectionKey) {
+        apiFiles = [];
+      }
     }
   }
 
   async function refreshHuggingFaceFiles() {
     if (location.hostname !== "huggingface.co") {
       huggingFaceTreeKey = "";
+      huggingFaceRefreshSequence++;
       huggingFaceFiles = [];
+      huggingFaceFilesReady = false;
       return;
     }
+    const repository = huggingFaceRepositoryInfo();
     const parts = location.pathname.split("/").filter(Boolean);
     const treeIndex = parts.indexOf("tree");
-    if (treeIndex !== 2 || parts.length < 4) {
+    let treePath = "";
+    if (repository && parts.length === 2) {
+      treePath = "main";
+    } else if (repository && treeIndex === 2 && parts.length >= 4) {
+      treePath = parts.slice(3).join("/") || "main";
+    } else {
       huggingFaceTreeKey = "";
+      huggingFaceRefreshSequence++;
       huggingFaceFiles = [];
+      huggingFaceFilesReady = false;
       return;
     }
-    const repo = parts.slice(0, 2).join("/");
-    const treePath = parts.slice(3).join("/") || "main";
-    const key = repo + ":" + treePath;
+    const key = repository.repo + ":" + treePath;
     if (huggingFaceTreeKey === key) return;
     huggingFaceTreeKey = key;
+    const refreshSequence = ++huggingFaceRefreshSequence;
     huggingFaceFiles = [];
+    huggingFaceFilesReady = false;
     try {
       const result = await browser.runtime.sendMessage({
         type: "loadHuggingFaceFiles",
-        repo,
+        repo: repository.repo,
         treePath
       });
+      if (refreshSequence !== huggingFaceRefreshSequence || huggingFaceTreeKey !== key) return;
       huggingFaceFiles = result && Array.isArray(result.files) ? result.files : [];
+      huggingFaceFilesReady = true;
       detect();
     } catch (_) {
+      if (refreshSequence !== huggingFaceRefreshSequence || huggingFaceTreeKey !== key) return;
       huggingFaceFiles = [];
+      huggingFaceFilesReady = true;
+      detect();
     }
   }
 
@@ -218,24 +276,36 @@
           files.push(file);
         }
       });
+      const huggingFaceRepository = huggingFaceRepositoryInfo();
+      if (huggingFaceRepository && huggingFaceFilesReady && !seen.has(huggingFaceRepository.rootUrl)) {
+        seen.add(huggingFaceRepository.rootUrl);
+        files.push({
+          name: huggingFaceRepository.archiveName,
+          url: huggingFaceRepository.rootUrl,
+          size: "",
+          packageAll: true
+        });
+      }
       if (apiFiles.length === 0) {
         document.querySelectorAll('a[href*="/api/download/models/"]').forEach(add);
       }
-      document.querySelectorAll('a[href*="/resolve/"]').forEach(anchor => {
-        if (isModelFileUrl(anchor.href)) add(anchor);
-      });
-      document.querySelectorAll('a[href*="/blob/"]').forEach(anchor => {
-        if (!/\.(safetensors|gguf|ckpt|bin|pt|pth|onnx|tflite)(\?|$)/i.test(anchor.href)) return;
-        const url = anchor.href.replace("/blob/", "/resolve/").split("#")[0];
-        add({
-          href: url + (url.includes("?") ? "&download=true" : "?download=true"),
-          innerText: decodeURIComponent(new URL(anchor.href).pathname.split("/").pop())
+      if (location.hostname === "huggingface.co" || location.hostname.endsWith(".huggingface.co")) {
+        document.querySelectorAll('a[href*="/resolve/"]').forEach(anchor => {
+          if (isModelFileUrl(anchor.href)) add(anchor);
         });
-      });
-      if (/\/blob\//.test(location.pathname)) {
-        let url = location.href.replace("/blob/", "/resolve/").split("#")[0];
-        if (!url.includes("?")) url += "?download=true";
-        add({href: url, innerText: decodeURIComponent(location.pathname.split("/").pop())});
+        document.querySelectorAll('a[href*="/blob/"]').forEach(anchor => {
+          if (!/\.(safetensors|gguf|ckpt|bin|pt|pth|onnx|tflite)(\?|$)/i.test(anchor.href)) return;
+          const url = anchor.href.replace("/blob/", "/resolve/").split("#")[0];
+          add({
+            href: url + (url.includes("?") ? "&download=true" : "?download=true"),
+            innerText: decodeURIComponent(new URL(anchor.href).pathname.split("/").pop())
+          });
+        });
+        if (/\/blob\//.test(location.pathname)) {
+          let url = location.href.replace("/blob/", "/resolve/").split("#")[0];
+          if (!url.includes("?")) url += "?download=true";
+          add({href: url, innerText: decodeURIComponent(location.pathname.split("/").pop())});
+        }
       }
 
       const payload = JSON.stringify({type: "detection", page: location.href, files: files.slice(0, 250)});
@@ -250,4 +320,23 @@
   detect();
   setInterval(detect, 1600);
   window.addEventListener("popstate", () => setTimeout(detect, 100));
+  document.addEventListener("click", () => {
+    if (!/\/models\/\d+/.test(location.pathname)) return;
+    // Civitai changes version tabs through client-side state. Probe shortly
+    // after the click and again after its animated content has settled.
+    setTimeout(detect, 80);
+    setTimeout(detect, 360);
+    setTimeout(detect, 900);
+  }, true);
+  const civitaiObserver = new MutationObserver(() => {
+    if (!/\/models\/\d+/.test(location.pathname)) return;
+    clearTimeout(civitaiObserver.pendingDetection);
+    civitaiObserver.pendingDetection = setTimeout(detect, 120);
+  });
+  civitaiObserver.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["href", "aria-selected"]
+  });
 })();

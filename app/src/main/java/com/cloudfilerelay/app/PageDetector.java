@@ -15,11 +15,24 @@ final class PageDetector {
         final String name;
         final String url;
         final String size;
+        final boolean packageAll;
+        final boolean submitOriginalUrl;
 
         FileCandidate(String name, String url, String size) {
+            this(name, url, size, false, false);
+        }
+
+        FileCandidate(String name, String url, String size, boolean packageAll) {
+            this(name, url, size, packageAll, false);
+        }
+
+        FileCandidate(String name, String url, String size, boolean packageAll,
+                      boolean submitOriginalUrl) {
             this.name = name;
             this.url = url;
             this.size = size;
+            this.packageAll = packageAll;
+            this.submitOriginalUrl = submitOriginalUrl;
         }
     }
 
@@ -68,11 +81,13 @@ final class PageDetector {
                 String url = file.optString("url");
                 String name = cleanName(file.optString("name"), url);
                 if (url.startsWith("http") && !name.isEmpty()) {
-                    output.add(new FileCandidate(name, url, file.optString("size")));
+                    output.add(new FileCandidate(name, url, file.optString("size"),
+                            file.optBoolean("packageAll", false)));
                 }
             }
         } catch (Exception ignored) {}
-        output.sort(Comparator.comparing((FileCandidate f) -> !f.name.toLowerCase(Locale.ROOT).endsWith(".safetensors"))
+        output.sort(Comparator.comparing((FileCandidate f) -> f.packageAll)
+                .thenComparing(f -> !f.name.toLowerCase(Locale.ROOT).endsWith(".safetensors"))
                 .thenComparing(f -> !isPreferredModelFile(f.name))
                 .thenComparing(f -> f.name));
         return output;
