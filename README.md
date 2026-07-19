@@ -5,6 +5,11 @@
 - 支持 Android 8.0 及以上系统
 - 支持 64 位 ARM Android 手机和平板
 
+## 下载应用
+
+- [下载最新版 APK](https://github.com/xuhongming251/CloudFileRelayAndroid/releases/latest/download/CloudFileRelayAndroid.apk)
+- [查看全部版本](https://github.com/xuhongming251/CloudFileRelayAndroid/releases)
+
 ## 一、软件功能简介
 
 - 输入文件下载地址，直接创建转存任务。
@@ -68,18 +73,20 @@ Hugging Face 可选择“打包全部文件”，将整个仓库打包为 ZIP。
 
 ### 下载源码
 
-新手可在项目仓库页面点击：
+项目地址：<https://github.com/xuhongming251/CloudFileRelayAndroid>
+
+新手可以直接[下载源码 ZIP](https://github.com/xuhongming251/CloudFileRelayAndroid/archive/refs/heads/main.zip)，下载完成后解压。
+
+也可以在项目页面点击：
 
 ```text
 Code → Download ZIP
 ```
 
-下载完成后解压源码。
-
 已安装 Git 的用户也可以执行：
 
 ```bash
-git clone <项目仓库地址>
+git clone https://github.com/xuhongming251/CloudFileRelayAndroid.git
 cd CloudFileRelayAndroid
 ```
 
