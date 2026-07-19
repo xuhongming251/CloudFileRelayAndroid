@@ -243,7 +243,7 @@ public class MainActivity extends Activity {
         providers.setClipToPadding(false);
         providers.setPadding(Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 5));
         View civitai = providerTile(R.drawable.ic_civitai_brand, "Civitai", "模型与 LoRA",
-                Color.rgb(239, 246, 255), Color.rgb(37, 99, 235), "https://civitai.com/");
+                Color.rgb(239, 246, 255), Color.rgb(37, 99, 235), "https://civitai.com/models");
         View huggingFace = providerTile(R.drawable.ic_huggingface_brand, "Hugging Face", "模型仓库",
                 Color.rgb(255, 247, 214), Color.rgb(245, 158, 11), "https://huggingface.co/models");
         LinearLayout.LayoutParams tileParams = new LinearLayout.LayoutParams(0, Ui.dp(this, 130), 1);

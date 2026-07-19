@@ -74,7 +74,7 @@ final class BrowserPage {
         this.onOpenTasks = onOpenTasks;
         this.onTasksChanged = onTasksChanged;
         if (requestedUrl == null || !requestedUrl.startsWith("http")) {
-            requestedUrl = "https://civitai.com/";
+            requestedUrl = "https://civitai.com/models";
         }
         currentUrl = requestedUrl;
         root = activity.getLayoutInflater().inflate(R.layout.activity_browser, null, false);
