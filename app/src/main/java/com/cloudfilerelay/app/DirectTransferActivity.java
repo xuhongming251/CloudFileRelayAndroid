@@ -2,26 +2,29 @@ package com.cloudfilerelay.app;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
+import android.widget.FrameLayout;
 
-public class BrowserActivity extends Activity {
+public class DirectTransferActivity extends Activity {
     private BrowserPage browserPage;
-    private boolean directDownload;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         String requestedUrl = getIntent().getStringExtra("start_url");
-        directDownload = getIntent().getBooleanExtra("direct_download", false);
-        browserPage = new BrowserPage(this, requestedUrl, directDownload,
-                this::finish, this::openTaskList, null);
-        setContentView(browserPage.view());
+        browserPage = new BrowserPage(this, requestedUrl, true,
+                this::finish, this::returnHome, null);
+
+        FrameLayout transparentHost = new FrameLayout(this);
+        transparentHost.setBackgroundColor(Color.TRANSPARENT);
+        setContentView(transparentHost);
+        transparentHost.post(browserPage::showDirectTransferDialog);
     }
 
-    private void openTaskList() {
+    private void returnHome() {
         Intent intent = new Intent(this, MainActivity.class);
-        if (!directDownload) intent.putExtra("tab", "tasks");
-        intent.putExtra(MainActivity.EXTRA_CLEAR_HOME_LINK, directDownload);
+        intent.putExtra(MainActivity.EXTRA_CLEAR_HOME_LINK, true);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
         finish();

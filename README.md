@@ -1,60 +1,121 @@
-# CloudFileRelay Android
+# 云端转存 Android
 
-原生 Android 客户端，支持在应用内登录并浏览 Civitai/Hugging Face、自动识别模型文件、解析设备登录态下的实际下载地址，并直接触发 GitHub Actions 完成网盘转存。
+一款用于转存模型文件的 Android 应用，支持 Civitai、Hugging Face 和文件下载直链。
 
-## 调用方式
+- 支持 Android 8.0 及以上系统
+- 支持 64 位 ARM Android 手机和平板
 
-应用直接调用以下仓库，不依赖转存网关：
+## 一、软件功能简介
 
-- 仓库：`xuhongming251/upload_cloud_storage`
-- 工作流：普通下载使用 `upload.yml`，百度网盘链接使用 `upload_linux.yml`
-- 提交参数：`trace_id`、`url`、`local_file`、`channel`
-- 状态：读取 workflow run、job steps 和名为 `result` 的 artifact
+- 输入文件下载地址，直接创建转存任务。
+- 在应用内浏览并登录 Civitai、Hugging Face。
+- 打开模型页面后，自动发现可转存文件。
+- 支持单选、多选模型文件。
+- Hugging Face 支持将整个仓库打包为 ZIP。
+- 发现页面支持多关键词模糊搜索。
+- 任务页面可查看进度、打开网盘链接和删除记录。
+- 支持夸克网盘、百度网盘和移动云盘。
 
-`channel` 与网盘的映射为：`0` 夸克、`1` 百度、`2` 移动云盘。
+## 二、使用说明
 
-## Token 配置
+### 安装应用
 
-为保持与 PC 端一致，本地构建时会优先读取：
+1. 将 APK 文件发送到 Android 手机。
+2. 在文件管理器中点击 APK。
+3. 按照系统提示完成安装。
 
-1. Gradle 属性 `GITHUB_TOKEN`
-2. 环境变量 `GITHUB_TOKEN`
-3. 相邻 PC 项目 `../CloudFileRelay/src/main/index.js` 中的现有 Token
+### 使用下载地址转存
 
-默认仓库配置可以通过 `GITHUB_OWNER`、`GITHUB_REPO`、`GITHUB_REF` Gradle 属性覆盖。Token 会进入 APK，因此应使用仅授权该仓库、仅含 Actions 必要权限的 fine-grained Token。
+1. 在首页输入真实的文件下载地址。
+2. 点击“转存”。
+3. 确认文件名并选择目标网盘。
+4. 点击“开始转存”。
+5. 在“任务”页面查看进度。
 
-## 构建
+### 浏览模型网站并转存
+
+1. 在首页点击 Civitai 或 Hugging Face。
+2. 如有需要，先登录自己的账号。
+3. 打开需要下载的模型页面。
+4. 选择一个或多个文件。
+5. 点击“立即转存”，选择网盘后提交。
+
+Hugging Face 可选择“打包全部文件”，将整个仓库打包为 ZIP。
+
+### 发现模型
+
+1. 点击底部“发现”。
+2. 浏览模型，或在搜索框中输入关键词。
+3. 多个关键词使用空格分开，例如 `wan lora fp16`。
+4. 点击模型右侧按钮即可转存。
+
+### 管理任务
+
+- 使用顶部标签筛选任务状态。
+- 点击任务可查看完整文件名。
+- 转存完成后，可直接打开网盘链接。
+- 左滑可删除单条记录，也可以清空任务列表。
+
+## 三、下载源码和构建应用
+
+### 准备工具
+
+- Android Studio
+- Java 17
+- Android SDK 35
+
+缺少 Java 或 Android SDK 时，可按照 Android Studio 的提示安装。
+
+### 下载源码
+
+新手可在项目仓库页面点击：
+
+```text
+Code → Download ZIP
+```
+
+下载完成后解压源码。
+
+已安装 Git 的用户也可以执行：
 
 ```bash
-export ANDROID_SDK_ROOT=/opt/homebrew/share/android-commandlinetools
+git clone <项目仓库地址>
+cd CloudFileRelayAndroid
+```
+
+### 构建 Debug APK
+
+1. 打开 Android Studio。
+2. 选择包含 `settings.gradle` 的项目文件夹。
+3. 等待项目同步完成。
+4. 点击 `Build → Build Bundle(s) / APK(s) → Build APK(s)`。
+
+生成的 APK 位于：
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+也可以在项目目录执行：
+
+```bash
 ./gradlew assembleDebug
-./gradlew assembleRelease
 ```
 
-也可以显式传入新 Token：
+Windows 请执行：
 
-```bash
-GITHUB_TOKEN=github_pat_xxx ./gradlew assembleRelease
+```bat
+gradlew.bat assembleDebug
 ```
 
-## 应用签名
+### 构建 Release APK
 
-项目根目录的 `cloud-file-relay.keystore` 是本应用独立的发布证书。签名密码从不入库的
-`keystore.properties` 读取。debug 与 release 使用相同的包名和证书，因此两种构建可以
-通过 `adb install -r` 相互覆盖，并保留 GeckoView 登录态和本地任务数据。
+在 Android Studio 中点击：
 
-本地签名配置包含以下字段：`storeFile`、`storePassword`、`keyAlias`、`keyPassword`。
-缺少该文件时，debug 会回退到 Android 默认调试证书，release 则输出未签名包。
+```text
+Build → Generate Signed Bundle / APK → APK
+```
 
-## 已实现
+按照提示选择或创建签名文件，再选择 `release` 完成构建。
 
-- Civitai/Hugging Face 持久登录 WebView
-- SPA 页面轮询识别与文件列表选择
-- Civitai 官方模型 API 文件名映射
-- Hugging Face `resolve` 文件识别和权重文件优先排序
-- 设备端 Cookie 下载跳转解析，Cookie 不上传
-- 直接触发 GitHub Actions，无需网关地址
-- GitHub run、job 步骤进度和结果 artifact 查询
-- 夸克、百度、移动云盘目标选择
-- 本地任务持久化、状态筛选、进度条和资源打开
-- Android 分享链接进入应用
+请妥善保存签名文件和密码，以后更新应用时需要继续使用同一份签名。

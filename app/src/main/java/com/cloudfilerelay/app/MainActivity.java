@@ -439,11 +439,13 @@ public class MainActivity extends Activity {
     }
 
     private void openBrowser(String url, boolean directDownload) {
-        Intent intent = new Intent(this, BrowserActivity.class);
+        Intent intent = new Intent(this, directDownload
+                ? DirectTransferActivity.class : BrowserActivity.class);
         intent.putExtra("start_url", url);
         intent.putExtra("direct_download", directDownload);
         startActivity(intent);
-        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+        if (directDownload) overridePendingTransition(0, 0);
+        else overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
     }
 
     private void clearSubmittedHomeLink(Intent intent) {

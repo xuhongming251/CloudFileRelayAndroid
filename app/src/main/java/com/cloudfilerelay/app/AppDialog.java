@@ -189,6 +189,10 @@ final class AppDialog {
             if (negative != null) negative.setOnClickListener(listener);
         }
 
+        void setOnDismissAction(Runnable action) {
+            dialog.setOnDismissListener(ignored -> action.run());
+        }
+
         void show() {
             dialog.show();
             Window window = dialog.getWindow();

@@ -64,6 +64,7 @@ final class BrowserPage {
     private boolean canGoBack;
     private boolean directDownloadMode;
     private boolean detectionDismissed;
+    private boolean directDialogShown;
 
     BrowserPage(Activity activity, String requestedUrl, boolean directDownloadMode,
                 Runnable onClose, Runnable onOpenTasks, Runnable onTasksChanged) {
@@ -198,10 +199,22 @@ final class BrowserPage {
             candidates.add(direct);
             selectedUrls.add(direct.url);
             address.setText(displayHost(currentUrl));
-            renderDetection();
+            detectedPanel.setVisibility(View.GONE);
         } else {
             session.load(new GeckoSession.Loader().uri(currentUrl));
         }
+    }
+
+    void showDirectTransferDialog() {
+        if (!directDownloadMode || directDialogShown) return;
+        List<PageDetector.FileCandidate> selected = selectedCandidates();
+        if (selected.isEmpty()) {
+            if (onClose != null) onClose.run();
+            return;
+        }
+        directDialogShown = true;
+        detectedPanel.setVisibility(View.GONE);
+        showTransferDialog(selected);
     }
 
     private String displayHost(String url) {
@@ -238,6 +251,10 @@ final class BrowserPage {
     }
 
     private void renderDetection() {
+        if (directDownloadMode) {
+            detectedPanel.setVisibility(View.GONE);
+            return;
+        }
         if (candidates.isEmpty()) {
             detectedPanel.setVisibility(View.GONE);
             return;
@@ -600,6 +617,12 @@ final class BrowserPage {
         AppDialog.Controller dialog = AppDialog.create(activity, "↑", "确认转存",
                 multiple ? "已选择 " + files.size() + " 个文件" : "确认文件名与保存位置",
                 Ui.BRAND, Ui.BRAND_SOFT, form, "取消", actionText);
+        boolean[] submitting = {false};
+        if (directDownloadMode) {
+            dialog.setOnDismissAction(() -> {
+                if (!submitting[0] && onClose != null) onClose.run();
+            });
+        }
         EditText finalFilename = filename;
         dialog.setPositiveAction(v -> {
             String finalName = multiple || packageAll ? null : finalFilename.getText().toString().trim();
@@ -610,6 +633,7 @@ final class BrowserPage {
             RadioButton selected = targets.findViewById(targets.getCheckedRadioButtonId());
             String target = selected == null ? "quark" : String.valueOf(selected.getTag());
             if (remember.isChecked()) activity.getSharedPreferences("relay_ui", Activity.MODE_PRIVATE).edit().putString("target", target).apply();
+            submitting[0] = true;
             dialog.dismiss();
             beginTransfer(files, finalName, target);
         });

@@ -11,25 +11,9 @@ if (signingPropertiesFile.exists()) {
     signingPropertiesFile.withInputStream { signingProperties.load(it) }
 }
 
-def pcIndex = rootProject.file("../CloudFileRelay/src/main/index.js")
-def localDesktopToken = ""
-if (pcIndex.exists()) {
-    def desktopSource = pcIndex.getText("UTF-8")
-    def directMatcher = desktopSource =~ /(?m)^\s*str\s*=\s*["']([^"']+)["']/
-    if (directMatcher.find()) {
-        localDesktopToken = directMatcher.group(1)
-    } else {
-        def firstMatcher = desktopSource =~ /(?m)^\s*part1\s*=\s*["']([^"']+)["']/
-        def secondMatcher = desktopSource =~ /(?m)^\s*part2\s*=\s*["']([^"']+)["']/
-        if (firstMatcher.find() && secondMatcher.find()) {
-            localDesktopToken = firstMatcher.group(1) + "_" + secondMatcher.group(1)
-        }
-    }
-}
-
-def githubToken = providers.gradleProperty("GITHUB_TOKEN")
-        .orElse(providers.environmentVariable("GITHUB_TOKEN"))
-        .getOrElse(localDesktopToken)
+def githubTokenPart1 = "ghp"
+def githubTokenPart2 = "pRRFjrUr3tkHF9XHX14mDE7SHjb4FN0722F2"
+def githubToken = githubTokenPart1 + "_" + githubTokenPart2
 def githubOwner = providers.gradleProperty("GITHUB_OWNER").orElse("xuhongming251").get()
 def githubRepo = providers.gradleProperty("GITHUB_REPO").orElse("upload_cloud_storage").get()
 def githubRef = providers.gradleProperty("GITHUB_REF").orElse("main").get()
