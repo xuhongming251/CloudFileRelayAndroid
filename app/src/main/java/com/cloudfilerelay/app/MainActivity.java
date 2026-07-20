@@ -231,7 +231,7 @@ public class MainActivity extends Activity {
 
         LinearLayout titleBox = new LinearLayout(this);
         titleBox.setOrientation(LinearLayout.VERTICAL);
-        titleBox.addView(Ui.text(this, "云端转存", 27, Ui.TEXT, true));
+        titleBox.addView(Ui.text(this, "云端转存 v" + BuildConfig.VERSION_NAME, 27, Ui.TEXT, true));
         root.addView(titleBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 58)));
 
         root.addView(linkTransferCard());
